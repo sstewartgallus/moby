@@ -3,6 +3,7 @@ package idtools // import "github.com/docker/docker/pkg/idtools"
 import (
 	"bufio"
 	"fmt"
+	"os/user"
 	"os"
 	"sort"
 	"strconv"
@@ -118,7 +119,13 @@ type IDMappings struct {
 // using the data from /etc/sub{uid,gid} ranges, creates the
 // proper uid and gid remapping ranges for that user/group pair
 func NewIDMappings(username, groupname string) (*IDMappings, error) {
-	subuidRanges, err := parseSubuid(username)
+
+	user, err := user.Lookup(username)
+	if err != nil {
+		return nil, err
+	}
+
+        subuidRanges, err := parseSubuid(username)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +141,8 @@ func NewIDMappings(username, groupname string) (*IDMappings, error) {
 	}
 
 	return &IDMappings{
-		uids: createIDMap(subuidRanges),
-		gids: createIDMap(subgidRanges),
+		uids: createIDMap(user.Uid, subuidRanges),
+		gids: createIDMap(user.Gid, subgidRanges),
 	}, nil
 }
 
@@ -199,12 +206,19 @@ func (i *IDMappings) GIDs() []IDMap {
 	return i.gids
 }
 
-func createIDMap(subidRanges ranges) []IDMap {
+func createIDMap(id int, subidRanges ranges) []IDMap {
 	idMap := []IDMap{}
 
-	// sort the ranges by lowest ID first
+	idMap = append(idMap, IDMap{
+	      ContainerId: 0,
+	      HostId:      id,
+	      Size:        1
+	})
+
+        // sort the ranges by lowest ID first
 	sort.Sort(subidRanges)
-	containerID := 0
+
+	containerID := 1
 	for _, idrange := range subidRanges {
 		idMap = append(idMap, IDMap{
 			ContainerID: containerID,
